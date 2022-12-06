@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"time"
 )
 
 func main() {
@@ -20,10 +21,54 @@ func main() {
 		lines = append(lines, s.Text())
 	}
 
+	measureTime(somSearch, "somSearch4x1000", lines[0], 4, 1000)
+	measureTime(somSearch, "somSearch14x1000", lines[0], 14, 1000)
+	measureTime(somSearchBasic, "somSearchBasic4x1000", lines[0], 4, 1000)
+	measureTime(somSearchBasic, "somSearchBasic14x1000", lines[0], 14, 1000)
+
+	//somSearch4x1000 took 163.7761ms
+	//somSearch14x1000 took 490.0602ms
+	//somSearchBasic4x1000 took 207.9999ms
+	//somSearchBasic14x1000 took 967.55ms
+
 	startOfPacket := somSearch(lines[0], 4)
-	fmt.Println("Start of Packet is at", startOfPacket)
 	startOfMessage := somSearch(lines[0], 14)
-	fmt.Println("Start of Message is at", startOfMessage)
+	sopBasic := somSearchBasic(lines[0], 4)
+	somBasic := somSearchBasic(lines[0], 14)
+	fmt.Printf("SOP=%d, SOM=%d, SOP(B)=%d, SOM(B)=%d\n", startOfPacket, startOfMessage, sopBasic, somBasic)
+}
+
+func measureTime(f func(string, int) int, name, line string, len, iterations int) {
+	defer duration(time.Now(), name)
+	for i := 0; i < iterations; i++ {
+		f(line, len)
+	}
+}
+
+func duration(start time.Time, name string) {
+	elapsed := time.Since(start)
+	fmt.Printf("%s took %s\n", name, elapsed)
+}
+
+func onlyUnique(window string) bool {
+	set := make(map[rune]interface{})
+	for _, r := range window {
+		if _, ok := set[r]; ok {
+			return false
+		}
+		set[r] = true
+	}
+	return true
+}
+
+func somSearchBasic(line string, numUnique int) int {
+	for i := numUnique; i < len(line); i++ {
+		// Check if the slice only has unique characters
+		if onlyUnique(line[i-numUnique : i]) {
+			return i
+		}
+	}
+	return 0
 }
 
 func somSearch(line string, numUnique int) int {
