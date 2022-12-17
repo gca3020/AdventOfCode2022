@@ -11,15 +11,22 @@ type coordinate struct {
 	x, y int
 }
 
+type pattern struct {
+	rockShape int
+	jetIdx    int
+}
+type cycleState struct {
+	height, rockCount int
+}
+
 type rock []coordinate
 
 type puzzle struct {
-	jet          string
-	jetIdx       int
-	chamber      map[coordinate]bool
-	rockCount    int64
-	repeatHeight int64
-	repeatCount  int64
+	jet           string
+	jetIdx        int
+	chamber       map[coordinate]bool
+	rockCount     int64
+	cycleDetector map[pattern]cycleState
 }
 
 func main() {
@@ -39,74 +46,41 @@ func main() {
 		lines = append(lines, s.Text())
 	}
 
-	p := puzzle{
-		jet:          lines[0],
-		jetIdx:       0,
-		chamber:      make(map[coordinate]bool),
-		rockCount:    0,
-		repeatHeight: 0,
-		repeatCount:  0,
-	}
-	fmt.Printf("The jet has %d entries\n", len(p.jet))
-	//p.part1()
-	p.part2()
+	p1 := NewPuzzle(lines[0])
+	p1.simulate(2022, false)
+
+	p1c := NewPuzzle(lines[0])
+	p1c.simulate(2022, true)
+
+	p2 := NewPuzzle(lines[0])
+	p2.simulate(1000000000000, true)
 }
 
 func duration(start time.Time, name string) {
 	elapsed := time.Since(start)
-	fmt.Printf("%s took %s\n", name, elapsed)
+	fmt.Printf("  -- %s took %s\n\n", name, elapsed)
 }
 
-func (p *puzzle) part1() {
-	defer duration(time.Now(), "part1")
-	for p.rockCount < 2022 {
-		// Add a rock and simulate its fall
-		r, ok := p.newRock(), true
-		for {
-			r = p.pushRock(r)
-			r, ok = p.fallRock(r)
-			if !ok {
-				break
-			}
-		}
-
-		// Add the resting place of the rock to the chamber
-		for _, coord := range r {
-			p.chamber[coord] = true
-		}
-
-		// Increment the total number of rocks dropped
-		p.rockCount++
+func NewPuzzle(line string) puzzle {
+	return puzzle{
+		jet:           line,
+		jetIdx:        0,
+		chamber:       make(map[coordinate]bool),
+		rockCount:     0,
+		cycleDetector: make(map[pattern]cycleState),
 	}
-	fmt.Printf("The tower height is %d after %d rocks\n", p.getHeight(), p.rockCount)
 }
 
-func (p *puzzle) part2() {
+func (p *puzzle) simulate(totalRocks int64, useCycleDetection bool) {
+	defer duration(time.Now(), fmt.Sprintf("simulate %d (%v)", totalRocks, useCycleDetection))
 	simulatedHeight := int64(0)
 	simulatedRocks := int64(0)
-	rocksToSimulate := int64(1000000000000)
-	h5, r5, h10, r10 := int64(0), int64(0), int64(0), int64(0)
-	for p.rockCount+simulatedRocks < rocksToSimulate {
+	for p.rockCount+simulatedRocks < totalRocks {
 		// Add a rock and simulate its fall
 		r, ok := p.newRock(), true
 		for {
 			r = p.pushRock(r)
 			r, ok = p.fallRock(r)
-
-			if p.jetIdx%len(p.jet) == 0 && p.jetIdx/len(p.jet) == 5 {
-				h5, r5 = int64(p.getHeight()), p.rockCount
-				fmt.Printf("After 5 repeats, the height is %d and the rock count is %d\n", h5, r5)
-			}
-			if p.jetIdx%len(p.jet) == 0 && p.jetIdx/len(p.jet) == 10 {
-				p.repeatHeight = int64(p.getHeight()) - h5
-				p.repeatCount = int64(p.rockCount) - r5
-				fmt.Printf("After 10 repeats, the height is %d (%d) and the rock count is %d (%d)\n", h10, p.repeatHeight, r10, p.repeatCount)
-				simulatedRepeats := (rocksToSimulate - p.rockCount) / p.repeatCount
-				simulatedHeight = simulatedRepeats * p.repeatHeight
-				simulatedRocks = simulatedRepeats * p.repeatCount
-				fmt.Printf("Simulating %d repeats adds %d extra height and %d extra rocks\n", simulatedRepeats, simulatedHeight, simulatedRocks)
-			}
-
 			if !ok {
 				break
 			}
@@ -119,11 +93,35 @@ func (p *puzzle) part2() {
 
 		// Increment the total number of rocks dropped
 		p.rockCount++
+
+		// Optional cycle detection
+		if useCycleDetection {
+			// Cycle detection. Don't start until after we've looped through the jet stream at least once to reach a steady state
+			if p.jetIdx/len(p.jet) > 0 && simulatedHeight == 0 {
+				detected, cycleHeight, cycleRocks := p.detectCycle(p.getHeight())
+				if detected {
+					simulatedRepeats := (totalRocks - p.rockCount) / cycleRocks
+					simulatedHeight = simulatedRepeats * cycleHeight
+					simulatedRocks = simulatedRepeats * cycleRocks
+					fmt.Printf("Found a cycle of %d rocks adding %d height. Simulating %d repeats\n", cycleRocks, cycleHeight, simulatedRepeats)
+				}
+			}
+		}
 	}
-	fmt.Printf("The tower height is %d (%d simulated) after %d rocks (%d simulated)\n",
-		int64(p.getHeight())+simulatedHeight, simulatedHeight,
+	fmt.Printf("The tower height is %d (%d sim) after %d rocks (%d sim)\n",
+		p.getHeight()+int(simulatedHeight), simulatedHeight,
 		p.rockCount+simulatedRocks, simulatedRocks,
 	)
+}
+
+func (p *puzzle) detectCycle(height int) (bool, int64, int64) {
+	patt := pattern{int(p.rockCount % 5), p.jetIdx % len(p.jet)}
+	new := cycleState{height, int(p.rockCount)}
+	if val, ok := p.cycleDetector[patt]; ok {
+		return true, int64(new.height - val.height), int64(new.rockCount - val.rockCount)
+	}
+	p.cycleDetector[patt] = new
+	return false, 0, 0
 }
 
 func (p *puzzle) newRock() rock {
@@ -200,19 +198,4 @@ func (p puzzle) getHeight() int {
 		}
 	}
 	return maxY
-}
-
-func (p puzzle) draw() {
-	for y := p.getHeight() + 3; y > 0; y-- {
-		fmt.Print("|")
-		for x := 0; x < 7; x++ {
-			if _, ok := p.chamber[coordinate{x, y}]; ok {
-				fmt.Print("#")
-			} else {
-				fmt.Print(".")
-			}
-		}
-		fmt.Print("|\n")
-	}
-	fmt.Println("+-------+")
 }
