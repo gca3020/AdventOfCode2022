@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"time"
 )
 
 type blueprint struct {
@@ -21,6 +22,11 @@ type puzzle struct {
 	blueprints []blueprint
 	totalTurns int
 	calls      int64
+}
+
+func duration(start time.Time, name string) {
+	elapsed := time.Since(start)
+	fmt.Printf("%s took %s\n", name, elapsed)
 }
 
 func main() {
@@ -62,6 +68,8 @@ func (p *puzzle) parse(lines []string) {
 }
 
 func (p *puzzle) part1() {
+	defer duration(time.Now(), "part1")
+
 	qlTotal := 0
 	for _, bp := range p.blueprints {
 		p.calls = 0
@@ -75,6 +83,7 @@ func (p *puzzle) part1() {
 }
 
 func (p *puzzle) part2() {
+	defer duration(time.Now(), "part2")
 	product := 1
 	for _, bp := range p.blueprints {
 		if bp.id > 3 {
