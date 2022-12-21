@@ -5,19 +5,15 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
-type list struct {
-	orig []*node
-	head *node
-	tail *node
-}
+type monkeyMap map[string]interface{}
 
-type node struct {
-	next  *node
-	prev  *node
-	value int64
+type monkey struct {
+	operation rune
+	m1, m2    string
 }
 
 func duration(start time.Time, name string) {
@@ -46,127 +42,53 @@ func main() {
 	part2(parse(lines))
 }
 
-func part1(l *list) {
+func part1(m monkeyMap) {
 	defer duration(time.Now(), "Part 1")
-	// Mix the list once
-	l.mix()
-	fmt.Printf("Part 1 - The code is %d\n", l.findCode())
+	fmt.Println("The root monkey's value is", m.getValue("root"))
 }
 
-func part2(l *list) {
+func part2(m monkeyMap) {
 	defer duration(time.Now(), "Part 2")
-
-	// Multiply all numbers in the list by the decryption key
-	decryptionKey := int64(811589153)
-	for _, n := range l.orig {
-		n.value *= decryptionKey
-	}
-
-	// Mix 10 times, then print the code
-	for i := 0; i < 10; i++ {
-		l.mix()
-	}
-
-	fmt.Printf("Part 2 - The code is %d\n", l.findCode())
 }
 
-func (l *list) findCode() int64 {
-	sum := int64(0)
-	n := l.find(0)
-	for i := 1; i <= 3000; i++ {
-		n = n.next
-		if i%1000 == 0 {
-			sum += n.value
-			fmt.Printf("%d: %d\n", i, n.value)
-		}
-	}
-	return sum
-}
-
-func parse(lines []string) *list {
-	l := &list{make([]*node, 0), nil, nil}
+func parse(lines []string) monkeyMap {
+	monkeys := make(monkeyMap)
 	for _, line := range lines {
-		if val, err := strconv.Atoi(line); err == nil {
-			l.pushBack(&node{nil, nil, int64(val)})
+		name, op, _ := strings.Cut(line, ": ")
+		fields := strings.Fields(op)
+		if len(fields) == 1 {
+			i, _ := strconv.Atoi(fields[0])
+			monkeys[name] = i
 		} else {
-			fmt.Println("Parser Error:", err)
+			m := monkey{rune(fields[1][0]), fields[0], fields[2]}
+			monkeys[name] = m
 		}
 	}
-
-	// After we're done parsing, link the head and tail to make the list circular
-	l.tail.next = l.head
-	l.head.prev = l.tail
-	return l
+	return monkeys
 }
 
-func (l *list) pushBack(n *node) {
-	if len(l.orig) == 0 {
-		l.head = n
-		l.tail = n
-	} else {
-		l.tail.next = n
-		n.prev = l.tail
-		l.tail = n
-	}
-	l.orig = append(l.orig, n)
-}
-
-func (n *node) move(l *list, pos int64) {
-	// We mod by one smaller than the total size of the list, since this item has technically been removed already
-	modPos := int(pos % int64(len(l.orig)-1))
-	// Shortcut if this element is not being moved. Do nothing
-	if modPos == 0 {
-		return
-	}
-
-	// First, pull this node out of the list and fill the gap
-	n.prev.next, n.next.prev = n.next, n.prev
-
-	// Then find the new location for this node
-	newPrev, newNext := n.newLocation(modPos)
-
-	// Then insert this element back into the list
-	newPrev.next, newNext.prev = n, n
-	n.prev, n.next = newPrev, newNext
-}
-
-func (n *node) newLocation(pos int) (newPrev, newNext *node) {
-	//fmt.Printf("Finding new location %d cells away\n", pos)
-	newPrev, newNext = n.prev, n.next
-	if pos > 0 {
-		for i := 0; i < pos; i++ {
-			newPrev, newNext = newPrev.next, newNext.next
-		}
-	} else if pos < 0 {
-		for i := 0; i > pos; i-- {
-			newPrev, newNext = newPrev.prev, newNext.prev
-		}
-	}
-	return newPrev, newNext
-}
-
-func (l *list) mix() {
-	fmt.Println("Mixing List")
-	for _, n := range l.orig {
-		n.move(l, n.value)
+func (m monkeyMap) getValue(name string) int {
+	switch val := m[name].(type) {
+	case int:
+		return val
+	case monkey:
+		return doOperation(val.operation, m.getValue(val.m1), m.getValue(val.m2))
+	default:
+		panic(fmt.Sprint("Error looking up monkey:", name))
 	}
 }
 
-func (l *list) find(val int64) *node {
-	for _, n := range l.orig {
-		if n.value == val {
-			return n
-		}
+func doOperation(op rune, a, b int) int {
+	switch op {
+	case '+':
+		return a + b
+	case '-':
+		return a - b
+	case '*':
+		return a * b
+	case '/':
+		return a / b
+	default:
+		panic(fmt.Sprintf("Invalid Operation: %c", op))
 	}
-	return nil
-}
-
-func (l *list) print() {
-	fmt.Printf("List (%d) (", len(l.orig))
-	n := l.head
-	for i := 0; i < len(l.orig); i++ {
-		fmt.Printf("%d ", n.value)
-		n = n.next
-	}
-	fmt.Printf(")\n")
 }
