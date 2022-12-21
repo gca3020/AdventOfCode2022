@@ -44,11 +44,18 @@ func main() {
 
 func part1(m monkeyMap) {
 	defer duration(time.Now(), "Part 1")
-	fmt.Println("The root monkey's value is", m.getValue("root"))
+	fmt.Println("Part 1 - The root monkey's value is", m.getValue("root"))
 }
 
 func part2(m monkeyMap) {
 	defer duration(time.Now(), "Part 2")
+
+	// Update the root monkey to have an equality op
+	root := m["root"].(monkey)
+	root.operation = '='
+	m["root"] = root
+
+	fmt.Println("Part 2 - The human value to achieve equality is", m.findHumanValue("root", 0))
 }
 
 func parse(lines []string) monkeyMap {
@@ -75,6 +82,77 @@ func (m monkeyMap) getValue(name string) int {
 		return doOperation(val.operation, m.getValue(val.m1), m.getValue(val.m2))
 	default:
 		panic(fmt.Sprint("Error looking up monkey:", name))
+	}
+}
+
+func (m monkeyMap) isVariable(name string) bool {
+	if name == "humn" {
+		return true
+	}
+
+	switch val := m[name].(type) {
+	case int:
+		return false
+	case monkey:
+		return m.isVariable(val.m1) || m.isVariable(val.m2)
+	default:
+		panic(fmt.Sprint("Error looking up monkey:", name))
+	}
+}
+
+func (m monkeyMap) findHumanValue(name string, exp int) int {
+	if name == "humn" {
+		return exp
+	}
+
+	v := m[name].(monkey)
+	m1Var, m1Val, m1Str := m.isVariable(v.m1), 0, ""
+	m2Var, m2Val, m2Str := m.isVariable(v.m2), 0, ""
+	if m1Var && m2Var {
+		panic("Both sides of the equation are variable!")
+	}
+
+	// Do some stuff so we can print some helpful debug
+	if m1Var {
+		m1Str = "x"
+		m2Val = m.getValue(v.m2)
+		m2Str = fmt.Sprint(m2Val)
+	}
+	if m2Var {
+		m2Str = "x"
+		m1Val = m.getValue(v.m1)
+		m1Str = fmt.Sprint(m1Val)
+	}
+	fmt.Printf("[%s] Finding Human \"x\" such that (%s %c %s = %d)\n", name, m1Str, v.operation, m2Str, exp)
+
+	switch v.operation {
+	case '=':
+		if m1Var {
+			return m.findHumanValue(v.m1, m2Val)
+		}
+		return m.findHumanValue(v.m2, m1Val)
+	case '+':
+		if m1Var {
+			return m.findHumanValue(v.m1, exp-m2Val)
+		}
+		return m.findHumanValue(v.m2, exp-m1Val)
+	case '-':
+		if m1Var {
+			return m.findHumanValue(v.m1, exp+m2Val)
+		}
+		return m.findHumanValue(v.m2, m1Val-exp)
+	case '*':
+		if m1Var {
+			return m.findHumanValue(v.m1, exp/m2Val)
+		}
+		return m.findHumanValue(v.m2, exp/m1Val)
+	case '/':
+		if m1Var {
+			return m.findHumanValue(v.m1, exp*m2Val)
+		}
+		return m.findHumanValue(v.m2, m1Val/exp)
+	default:
+		panic(fmt.Sprintf("Unhandled Operation: \"%c\"!\n", v.operation))
 	}
 }
 
