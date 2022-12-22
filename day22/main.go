@@ -46,8 +46,11 @@ func main() {
 		lines = append(lines, s.Text())
 	}
 
-	puzzle := parse(lines)
-	puzzle.part1()
+	p1 := parse(lines)
+	p1.run(false)
+
+	p2 := parse(lines)
+	p2.run(true)
 }
 
 func parse(lines []string) Puzzle {
@@ -79,21 +82,21 @@ func parse(lines []string) Puzzle {
 			}
 		}
 	}
-	fmt.Printf("%#v\n", steps)
 
 	return Puzzle{b, steps, Player{0, b.firstCol(0), right}}
 }
 
-func (p *Puzzle) part1() {
+func (p *Puzzle) run(part2 bool) {
 	// TODO: Run through the maze
 	for _, step := range p.steps {
-		fmt.Println("The player is", p.player)
 		switch s := step.(type) {
 		case int:
-			fmt.Printf("Moving %d\n", s)
-			p.player.move(s, p.board)
+			if part2 {
+				p.player.moveCube(s, p.board)
+			} else {
+				p.player.moveFlat(s, p.board)
+			}
 		case Direction:
-			fmt.Printf("Turning %c\n", s)
 			p.player.turn(s)
 		}
 	}
@@ -139,7 +142,7 @@ func (p Player) getScore() int {
 	return ((p.row + 1) * 1000) + ((p.col + 1) * 4) + int(p.facing)
 }
 
-func (p Player) nextLocation(b Board) (row, col int) {
+func (p Player) nextLocationFlat(b Board) (row, col int) {
 	row, col = p.row, p.col
 	switch p.facing {
 	case right:
@@ -166,14 +169,119 @@ func (p Player) nextLocation(b Board) (row, col int) {
 	return
 }
 
-func (p *Player) move(n int, b Board) {
+func (p *Player) moveFlat(n int, b Board) {
 	for i := 0; i < n; i++ {
-		r, c := p.nextLocation(b)
+		r, c := p.nextLocationFlat(b)
 		if b[r][c] == '#' {
 			// We hit a rock, break early
 			break
 		}
 		p.row, p.col = r, c
+	}
+}
+
+func getCubeFace(row, col int) int {
+	if row >= 0 && row <= 49 && col >= 50 && col <= 99 {
+		return 0
+	}
+	if row >= 0 && row <= 49 && col >= 100 && col <= 149 {
+		return 1
+	}
+	if row >= 50 && row <= 99 && col >= 50 && col <= 99 {
+		return 2
+	}
+	if row >= 100 && row <= 149 && col >= 0 && col <= 49 {
+		return 3
+	}
+	if row >= 100 && row <= 149 && col >= 50 && col <= 99 {
+		return 4
+	}
+	if row >= 150 && row <= 199 && col >= 0 && col <= 49 {
+		return 5
+	}
+	return -1
+}
+
+func (p Player) nextLocationCube(b Board) (row, col int, dir Direction) {
+	face := getCubeFace(p.row, p.col)
+	row, col, dir = p.row, p.col, p.facing
+	switch p.facing {
+	case right:
+		col++
+		if col > b.lastCol(row) {
+			switch face {
+			case 1:
+				row, col, dir = (49-p.row)+100, 99, left
+			case 2:
+				row, col, dir = 49, 50+p.row, up
+			case 4:
+				row, col, dir = 49-(p.row-100), 149, left
+			case 5:
+				row, col, dir = 149, p.row-100, up
+			default:
+				fmt.Println("Can't move right from face", face)
+			}
+		}
+	case down:
+		row++
+		if row > b.lastRow(col) {
+			switch face {
+			case 1:
+				row, col, dir = p.col-50, 99, left
+			case 4:
+				row, col, dir = 150+(p.col-50), 49, left
+			case 5:
+				row, col, dir = 0, p.col+100, down
+			default:
+				fmt.Println("Can't move down from face", face)
+			}
+		}
+	case left:
+		col--
+		if col < b.firstCol(row) {
+			switch face {
+			case 0:
+				row, col, dir = (49-p.row)+100, 0, right
+			case 2:
+				row, col, dir = 100, p.row-50, down
+			case 3:
+				row, col, dir = 49-(p.row-100), 50, right
+			case 5:
+				row, col, dir = 0, 50+(p.row-150), down
+			default:
+				fmt.Println("Can't move left from face", face)
+			}
+		}
+	case up:
+		row--
+		if row < b.firstRow(col) {
+			switch face {
+			case 0:
+				row, col, dir = 150+(p.col-50), 0, right
+			case 1:
+				row, col, dir = 199, col-100, up
+			case 3:
+				row, col, dir = col+50, 50, right
+			default:
+				fmt.Println("Can't move up from face", face)
+			}
+		}
+	}
+
+	newFace := getCubeFace(row, col)
+	if face != newFace {
+		fmt.Printf("Moving from %d-(%d,%d,%v) to %d-(%d,%d,%v)(%c)\n", face, p.row, p.col, p.facing, newFace, row, col, dir, b[row][col])
+	}
+	return
+}
+
+func (p *Player) moveCube(n int, b Board) {
+	for i := 0; i < n; i++ {
+		r, c, d := p.nextLocationCube(b)
+		if b[r][c] == '#' {
+			break
+		}
+		p.row, p.col, p.facing = r, c, d
 	}
 }
 
@@ -189,4 +297,18 @@ func (p *Player) turn(d Direction) {
 			p.facing = right
 		}
 	}
+}
+
+func (d Direction) String() string {
+	switch d {
+	case right:
+		return "right"
+	case down:
+		return "down"
+	case left:
+		return "left"
+	case up:
+		return "up"
+	}
+	return ""
 }
